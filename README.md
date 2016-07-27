@@ -1,4 +1,13 @@
-# PoGoMap
+# PoGoMap - multi host adaptions
+
+All credits to [favll](https://github.com/favll/pogom) for the basic work.
+
+Only revamped the map html and js a bit.
+
+includes notifications, notification center for each user, and a show only filter.
+
+removed the feature to replace the center of scanning (as multiple user would set it to multiple locations)
+
 The no-bloat version of [PokemonGo-Map](https://github.com/AHAAAAAAA/PokemonGo-Map) (their rewrite is actually an early-stage fork of this project).
 
 Heavily using [pgoapi](https://github.com/tejado/pgoapi). 
