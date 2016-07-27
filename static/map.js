@@ -1,5 +1,8 @@
 "use strict"
 // let pad = number => number <= 99 ? ("0"+number).slice(-2) : number;
+var pad = function (number) {
+        return number <= 99 ? ("0"+number).slice(-2) : number;
+}
 
 var $loginStatus = $(".login-status");
 var $lastRequestLabel = $(".last-request");
