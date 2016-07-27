@@ -232,12 +232,30 @@ span.select2 { width: 100% !important; }
                             <input type="checkbox" id="coverage-checkbox">
                             <label for="coverage-checkbox">Show Map Coverage</label><br> 
                         </div>
+
+                        <div class="chckbox">
+                            <input type="checkbox" id="notification-checkbox">
+                            <label for="notification-checkbox">Notify on spawn</label><br> 
+                        </div>
+                            <input type="hidden" id="notification-center-lat">
+                            <input type="hidden" id="notification-center-lang">
+                        <div>
+                            <label for="notification-radius">Notification Radius</label><br> 
+                            <input type="input" id="notification-radius"><br>
+                        </div>
                     </fieldset>
                     
                     <p>
                     <label for="exclude-pokemon">
-                        Hide common Pokemon:
+                        Hide following Pokemon:
                         <select id="exclude-pokemon" multiple="multiple"></select>
+                    </label>
+                    </p>
+                    
+                    <p>
+                    <label for="include-pokemon">
+                        Only show following Pokemon:
+                        <select id="include-pokemon" multiple="multiple"></select>
                     </label>
                     </p>
 

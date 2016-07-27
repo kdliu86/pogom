@@ -1,11 +1,14 @@
 "use strict"
+// let pad = number => number <= 99 ? ("0"+number).slice(-2) : number;
 
 var $loginStatus = $(".login-status");
 var $lastRequestLabel = $(".last-request");
 var $fullScanLabel = $(".full-scan");
 
 var $selectExclude = $("#exclude-pokemon");
+var $selectInclude = $("#include-pokemon");
 var excludedPokemon = [];
+var includedPokemon = [];
 
 var map;
 var coverCircle;
@@ -15,48 +18,59 @@ var currentLocationMarker;
 
 try {
     excludedPokemon = JSON.parse(localStorage.excludedPokemon);
-    console.log(excludedPokemon);
+    includedPokemon = JSON.parse(localStorage.includedPokemon);
+    console.log('excluded', excludedPokemon);
+    console.log('included', includedPokemon);
 } catch (e) {}
 
+var d = "displayPokemons" in localStorage ? localStorage.displayPokemons : 'true';
+document.getElementById('pokemon-checkbox').checked = (d === 'true');
+d = "displayGyms" in localStorage ? localStorage.displayGyms : 'true';
+document.getElementById('gyms-checkbox').checked = (d === 'true');
+d = "notifyOnSpawn" in localStorage ? localStorage.notifyOnSpawn : 'false';
+document.getElementById('notification-checkbox').checked = (d === 'true');
 
-function getFromStorage(keyName, default_value) {
-    var res = localStorage.getItem(keyName);
-    if(res){
-        return res === "true";
-    } else {
-        return default_value;
-    }
-}
 
-function pad(num, size) {
-    var s = num+"";
-    if (s.length < 2) s = "0" + s;
-    return s;
-}
+d = "notificationCenterLat" in localStorage ? localStorage.notificationCenterLat : center_lat;
+document.getElementById('notification-center-lat').value = d;
+d = "notificationCenterLang" in localStorage ? localStorage.notificationCenterLang : center_lng;
+document.getElementById('notification-center-lang').value = d;
+d = "notificationRadius" in localStorage ? localStorage.notificationRadius : 1000;
+document.getElementById('notification-radius').value = d;
 
-document.getElementById('pokemon-checkbox').checked = getFromStorage("displayPokemons", "true");
-document.getElementById('gyms-checkbox').checked = getFromStorage("displayGyms", "true");
-document.getElementById('coverage-checkbox').checked = getFromStorage("displayCoverage", "true");
-
- 
 $.getJSON("static/locales/pokemon.en.json").done(function(data) {
     var pokeList = [];
+    var pokeList2 = [];
 
     $.each(data, function(key, value) {
         pokeList.push( { id: key, text: value } );
+        pokeList2.push( { id: key, text: value } );
     });
 
     $selectExclude.select2({
-        placeholder: "Type to exclude Pokemon",
+        placeholder: "Type to exclude Pokemon (empty = none)",
         data: pokeList
     });
     $selectExclude.val(excludedPokemon).trigger("change");
+
+    $selectInclude.select2({
+        placeholder: "Type to include Pokemon (empty = all)",
+        data: pokeList2
+    });
+    $selectInclude.val(includedPokemon).trigger("change");
 });
 
-// exclude multi-select listener
+// include multi-select listener
 $selectExclude.on("change", function (e) {
     excludedPokemon = $selectExclude.val().map(Number);
     localStorage.excludedPokemon = JSON.stringify(excludedPokemon);
+    clearStaleMarkers();
+});
+
+// include multi-select listener
+$selectInclude.on("change", function (e) {
+    includedPokemon = $selectInclude.val().map(Number);
+    localStorage.includedPokemon = JSON.stringify(includedPokemon);
     clearStaleMarkers();
 });
 
@@ -74,38 +88,37 @@ $('#map').on('click', '#new-loc-btn', function () {
 
 function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
-        center: {lat: center_lat, lng: center_lng},
-        zoom: 13,
+        center: {lat: parseFloat(document.getElementById('notification-center-lat').value), lng: parseFloat(document.getElementById('notification-center-lang').value)},
+        zoom: 15,
         mapTypeControl: false,
         streetViewControl: false,
         disableAutoPan: true
     });
-    
-    updateMap();
 
     currentLocationMarker = new google.maps.Marker({
-        position: {lat: center_lat, lng: center_lng},
+        position: {lat: parseFloat(document.getElementById('notification-center-lat').value), lng: parseFloat(document.getElementById('notification-center-lang').value)},
         map: map,
         animation: google.maps.Animation.DROP
     });
 
     // on click listener for
     google.maps.event.addListener(map, 'click', function(event) {
-        if (newLocationMarker) {
-            newLocationMarker.setMap(null);
+        if (currentLocationMarker) {
+            currentLocationMarker.setMap(null);
        }
-        newLocationMarker = new google.maps.Marker({
+        currentLocationMarker = new google.maps.Marker({
             position: event.latLng,
-            map: map
+            map: map,
+            animation: google.maps.Animation.DROP
         });
-        newLocationMarker.infoWindow = new google.maps.InfoWindow({
-            content: "<button id=\"new-loc-btn\">Set new Location</button>",
-            disableAutoPan: true
-        });
-        newLocationMarker.infoWindow.open(map, newLocationMarker);
-        google.maps.event.addListener(newLocationMarker.infoWindow,'closeclick',function(){
-            newLocationMarker.setMap(null); //removes the marker
-        });
+
+        document.getElementById('notification-center-lat').value = event.latLng.lat();
+        document.getElementById('notification-center-lang').value = event.latLng.lng();
+        localStorage.notificationCenterLat = event.latLng.lat();
+        localStorage.notificationCenterLang = event.latLng.lng();
+        localStorage.notificationRadius = document.getElementById('notification-radius').value;
+
+        buildCircle();
     });
 };
 
@@ -113,20 +126,21 @@ function initMap() {
 function pokemonLabel(name, id, disappear_time, latitude, longitude) {
     var disappear_date = new Date(disappear_time);
 
-    var label = "<div>\
-            <b>" +name+ "</b>\
-            <span> - </span>\
-            <small>\
-                <a href='http://www.pokemon.com/us/pokedex/" +id+ "' target='_blank' title='View in Pokedex'>#"+id+"</a>\
-            </small>\
-        </div>\
-        <div>\
-            Disappears at " +pad(disappear_date.getHours())+ ":"+pad(disappear_date.getMinutes())+":"+pad(disappear_date.getSeconds())+"\
-            <span class='label-countdown' disappears-at='"+disappear_time+"'>(00m00s)</span></div>\
-        <div>\
-            <a href='https://www.google.com/maps/dir/Current+Location/"+latitude+","+longitude+"'\
-                    target='_blank' title='View in Maps'>Get Directions</a>\
-        </div>";
+    var label = `
+        <div>
+            <b>${name}</b>
+            <span> - </span>
+            <small>
+                <a href='http://www.pokemon.com/us/pokedex/${id}' target='_blank' title='View in Pokedex'>#${id}</a>
+            </small>
+        </div>
+        <div>
+            Disappears at ${pad(disappear_date.getHours())}:${pad(disappear_date.getMinutes())}:${pad(disappear_date.getSeconds())}
+            <span class='label-countdown' disappears-at='${disappear_time}'>(00m00s)</span></div>
+        <div>
+            <a href='https://www.google.com/maps/dir/Current+Location/${latitude},${longitude}'
+                    target='_blank' title='View in Maps'>Get Directions</a>
+        </div>`;
     return label;
 };
 
@@ -134,20 +148,21 @@ function gymLabel(team_name, team_id, gym_points) {
     var gym_color = [ "0, 0, 0, .4", "74, 138, 202, .6", "240, 68, 58, .6", "254, 217, 40, .6" ];
     var str;
     if (team_name == 0) {
-        str = "<div><center>\
-            <div>\
-                <b style='color:rgba(" + gym_color[team_id] + ")'>" + team_name + "</b><br>\
-            </div>\
-            </center></div>";
+        str = `<div><center>
+            <div>
+                <b style='color:rgba(${gym_color[team_id]})'>${team_name}</b><br>
+            </div>
+            </center></div>`;
     } else {
-        str = "<div><center>\
-            <div style='padding-bottom: 2px'>Gym owned by:</div>\
-            <div>\
-                <b style='color:rgba("+ gym_color[team_id] + ")'>Team " + team_name + "</b><br>\
-                <img height='70px' style='padding: 5px;' src='static/forts/" + team_name + "_large.png'> \
-            </div>\
-            <div>Prestige: " + gym_points + "</div>\
-            </center></div>";
+        str = `
+            <div><center>
+            <div style='padding-bottom: 2px'>Gym owned by:</div>
+            <div>
+                <b style='color:rgba(${gym_color[team_id]})'>Team ${team_name}</b><br>
+                <img height='70px' style='padding: 5px;' src='static/forts/${team_name}_large.png'> 
+            </div>
+            <div>Prestige: ${gym_points}</div>
+            </center></div>`;
     }
 
     return str;
@@ -224,15 +239,36 @@ function clearStaleMarkers(){
     $.each(map_pokemons, function(key, value) {
 
         if (map_pokemons[key]['disappear_time'] < new Date().getTime() ||
-                excludedPokemon.indexOf(map_pokemons[key]['pokemon_id']) >= 0) {
+                excludedPokemon.indexOf(map_pokemons[key]['pokemon_id']) >= 0 ||
+                (includedPokemon.length > 0 && includedPokemon.indexOf(map_pokemons[key]['pokemon_id']) < 0)) {
             map_pokemons[key].marker.setMap(null);
-            console.log("removing marker with key "+key);
+            // console.log("removing marker with key " + key);
             delete map_pokemons[key];
         }
     });
 }
 
+function buildCircle() {
+    if (coverCircle) {
+        coverCircle.setCenter({lat: parseFloat(document.getElementById('notification-center-lat').value), lng: parseFloat(document.getElementById('notification-center-lang').value)});
+        coverCircle.setRadius(parseInt(document.getElementById('notification-radius').value));
+    } else {
+        coverCircle = new google.maps.Circle({
+            strokeColor: '#FF0000',
+            strokeOpacity: 0.6,
+            strokeWeight: 1,
+            fillColor: '#FF0000',
+            fillOpacity: 0.08,
+            clickable: false,
+            map: map,
+            center: {lat: parseFloat(document.getElementById('notification-center-lat').value), lng: parseFloat(document.getElementById('notification-center-lang').value)},
+            radius: parseInt(document.getElementById('notification-radius').value)
+        });
+    }
+}
+
 function updateMap() {
+    var bounds = null;
     $.ajax({
         url: "map-data",
         type: 'GET',
@@ -247,30 +283,12 @@ function updateMap() {
          if (JSON.stringify(result['search_area']) !== JSON.stringify(searchLocation)) {
             searchLocation = result['search_area'];
 
-            if (currentLocationMarker) currentLocationMarker.setMap(null);
-            currentLocationMarker = new google.maps.Marker({
-                position: searchLocation,
-                map: map,
-                animation: google.maps.Animation.DROP
-            });
+            // console.log("is different");
+            buildCircle();
 
-            if (coverCircle) {
-                coverCircle.setCenter(searchLocation);
-                coverCircle.setRadius(searchLocation['radius']);
-            } else {
-                coverCircle = new google.maps.Circle({
-                    strokeColor: '#FF0000',
-                    strokeOpacity: 0.6,
-                    strokeWeight: 1,
-                    fillColor: '#FF0000',
-                    fillOpacity: 0.08,
-                    clickable: false,
-                    map: map,
-                    center: searchLocation,
-                    radius: searchLocation['radius']
-                });
-                coverCircle.setVisible(document.getElementById('coverage-checkbox').checked);
-            }
+            bounds = coverCircle.getBounds();
+        } else {
+            // console.log("not different");
         }
 
        $.each(result.pokemons, function(i, item){
@@ -279,11 +297,18 @@ function updateMap() {
             }
 
             if (!(item.encounter_id in map_pokemons) && 
-                    excludedPokemon.indexOf(item.pokemon_id) < 0) {
+                    excludedPokemon.indexOf(item.pokemon_id) < 0 && 
+                    (includedPokemon.length == 0 || includedPokemon.indexOf(item.pokemon_id) >= 0)) {
                 // add marker to map and item to dict
                 if (item.marker) item.marker.setMap(null);
                 item.marker = setupPokemonMarker(item);
                 map_pokemons[item.encounter_id] = item;
+
+                var myLatlng = new google.maps.LatLng(item.latitude, item.longitude);
+
+                if (!bounds || bounds.contains(myLatlng)) {
+                    notifyMe(item);
+                }
             }
         });
 
@@ -316,6 +341,16 @@ function updateMap() {
 }
 
 window.setInterval(updateMap, 10000);
+updateMap();
+
+$('#notification-radius').change(function() {
+    localStorage.notificationRadius = this.value;
+    buildCircle();
+});
+
+$('#notification-checkbox').change(function() {
+    localStorage.notifyOnSpawn = this.checked;
+});
 
 $('#gyms-checkbox').change(function() {
     localStorage.displayGyms = this.checked;
@@ -339,11 +374,6 @@ $('#pokemon-checkbox').change(function() {
         });
         map_pokemons = {}
     }
-});
-
-$('#coverage-checkbox').change(function() {
-    localStorage.displayCoverage = this.checked;
-    coverCircle.setVisible(this.checked);    
 });
 
 var coverCircles = [];
@@ -392,7 +422,7 @@ function statusLabels(status) {
 
     var difference = status['last-successful-request'];
 
-    if (difference == 'na') {
+    if (difference == 'none') {
 
     } else if (difference == 'sleep') {
         $lastRequestLabel.removeClass('label-danger label-warning');
@@ -468,4 +498,45 @@ var updateLabelDiffTime = function() {
     });
 };
 
+function showNotification(pokemon) {
+    // console.log(pokemon);
+    var options = {
+        body: pokemon.pokemon_name + " found!",
+        icon: 'static/icons/' + pokemon.pokemon_id + '.png'
+    };
+    var notification = new Notification(pokemon.pokemon_name + " found!", options);
+}
+
+function notifyMe(pokemon) {
+  // Let's check if the browser supports notifications
+  if (!("Notification" in window)) {
+    return;
+  }
+
+  if (!document.getElementById('notification-checkbox').checked) {
+    return false; // in case the checkbox was unchecked in the meantime.
+  }
+
+  // Let's check whether notification permissions have already been granted
+  else if (Notification.permission === "granted") {
+    // If it's okay let's create a notification
+    showNotification(pokemon);
+  }
+
+  // Otherwise, we need to ask the user for permission
+  else if (Notification.permission !== 'denied') {
+    Notification.requestPermission(function (permission) {
+      // If the user accepts, let's create a notification
+      if (permission === "granted") {
+        showNotification(pokemon);
+      }
+    });
+  }
+
+  // At last, if the user has denied notifications, and you 
+  // want to be respectful there is no need to bother them any more.
+}
+
 window.setInterval(updateLabelDiffTime, 1000);
+
+
