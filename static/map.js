@@ -251,10 +251,14 @@ function clearStaleMarkers(){
     });
 }
 
+var coverCircle = null;
+var bounds = null;
+
 function buildCircle() {
     if (coverCircle) {
         coverCircle.setCenter({lat: parseFloat(document.getElementById('notification-center-lat').value), lng: parseFloat(document.getElementById('notification-center-lang').value)});
         coverCircle.setRadius(parseInt(document.getElementById('notification-radius').value));
+        bounds = coverCircle.getBounds();
     } else {
         coverCircle = new google.maps.Circle({
             strokeColor: '#FF0000',
@@ -267,6 +271,7 @@ function buildCircle() {
             center: {lat: parseFloat(document.getElementById('notification-center-lat').value), lng: parseFloat(document.getElementById('notification-center-lang').value)},
             radius: parseInt(document.getElementById('notification-radius').value)
         });
+        bounds = coverCircle.getBounds();
     }
 }
 
@@ -287,9 +292,6 @@ function updateMap() {
             searchLocation = result['search_area'];
 
             // console.log("is different");
-            buildCircle();
-
-            bounds = coverCircle.getBounds();
         } else {
             // console.log("not different");
         }
