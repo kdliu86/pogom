@@ -310,7 +310,7 @@ function updateMap() {
 
                 var myLatlng = new google.maps.LatLng(item.latitude, item.longitude);
 
-                if (!bounds || bounds.contains(myLatlng)) {
+                if (bounds && bounds.contains(myLatlng)) {
                     notifyMe(item);
                 }
             }
