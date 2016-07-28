@@ -276,7 +276,6 @@ function buildCircle() {
 }
 
 function updateMap() {
-    var bounds = null;
     $.ajax({
         url: "map-data",
         type: 'GET',
